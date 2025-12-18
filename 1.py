@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
@@ -11,10 +13,12 @@ from sklearn.metrics import accuracy_score
 
 train_df = pd.read_csv("/kaggle/input/testtrain/train.csv")
 test_df = pd.read_csv("/kaggle/input/testtrain/test.csv")
+
 train_df = train_df.drop_duplicates()
 
 print("Train shape:", train_df.shape)
 print("Test shape:", test_df.shape)
+
 TARGET = "Class"
 
 X = train_df.drop(TARGET, axis=1)
@@ -27,26 +31,41 @@ y = y[mask]
 print("Rows after removing missing target:", X.shape[0])
 
 label_encoder = None
-
 if y.dtype == "object":
     label_encoder = LabelEncoder()
     y = label_encoder.fit_transform(y)
-    print("Target encoded")
 
 empty_cols = X.columns[X.isnull().all()]
-
 X = X.drop(empty_cols, axis=1)
-low_variance_cols = [c for c in X.columns if X[c].nunique() <= 2]
-X = X.drop(columns=low_variance_cols)
 test_df = test_df.drop(empty_cols, axis=1)
 
-print("Dropped empty columns:", list(empty_cols))
+low_variance_cols = [c for c in X.columns if X[c].nunique() <= 2]
+X = X.drop(columns=low_variance_cols)
+test_df = test_df.drop(columns=low_variance_cols, errors="ignore")
 
 numeric_cols = X.select_dtypes(include=["int64", "float64"]).columns
 categorical_cols = X.select_dtypes(include=["object"]).columns
 
-print("Numeric:", len(numeric_cols))
-print("Categorical:", len(categorical_cols))
+plt.figure(figsize=(6, 4))
+sns.countplot(x=train_df[TARGET])
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(12, 6))
+sns.heatmap(train_df.isnull(), cbar=False)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(14, 6))
+X[numeric_cols].boxplot(rot=90)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(12, 10))
+corr = X[numeric_cols].corr()
+sns.heatmap(corr, cmap="coolwarm", square=True, linewidths=0.5)
+plt.show()
 
 numeric_pipeline = Pipeline([
     ("imputer", SimpleImputer(strategy="median"))
@@ -81,6 +100,7 @@ pipeline = Pipeline([
     ("preprocessor", preprocessor),
     ("model", model)
 ])
+
 param_grid = {
     "model__max_depth": [14, 18, None],
     "model__min_samples_split": [5, 10],
@@ -111,12 +131,10 @@ test_preds = best_model.predict(test_df)
 if label_encoder is not None:
     test_preds = label_encoder.inverse_transform(test_preds)
 
-ids = test_df['id']
 submission = pd.DataFrame({
-    'id':ids,
+    "id": test_df["id"],
     TARGET: test_preds
 })
 
 submission.to_csv("submission.csv", index=False)
-
-print("CSV created")
+print("submission.csv created")
